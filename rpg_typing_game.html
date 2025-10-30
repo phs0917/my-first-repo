@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>RPG 타자 연습 — 확장판</title>
+<style>
+  /* 기본 레이아웃 */
+  body { font-family:system-ui, -apple-system, "Segoe UI", Roboto; background:#f6f7fb; color:#111; display:flex; align-items:flex-start; justify-content:center; padding:20px; }
+  #game { width:900px; background:white; border:1px solid #ddd; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,0.06); border-radius:8px; }
+  h2 { margin:0 0 12px 0; }
+  .row { display:flex; gap:12px; margin-bottom:12px; align-items:center; }
+  .col { flex:1; }
+  .panel { background:#fcfdff; border:1px solid #eef2ff; padding:10px; border-radius:6px; }
+  button { padding:8px 12px; cursor:pointer; border-radius:6px; border:1px solid #cbd5e1; background:#fff; }
+  select,input { padding:6px; border-radius:6px; border:1px solid #e2e8f0; }
+  #log { height:160px; overflow:auto; background:#0b1220; color:#e6eef8; padding:8px; font-size:13px; border-radius:6px; }
+  #wordBox { font-size:22px; font-weight:700; padding:10px; border:1px solid #e6edf6; background:#f8fafc; border-radius:6px; min-height:48px; display:flex; align-items:center; justify-content:center; }
+  input[type="text"] { padding:8px; width:100%; box-sizing:border-box; border-radius:6px; border:1px solid #e2e8f0; }
+  .stat { background:#fff; padding:8px; border:1px solid #eef2ff; border-radius:6px; }
+  /* 간단 애니메이션 효과: 공격시 플래시 */
+  .entity { padding:8px; border-radius:8px; text-align:center; }
+  .playerBox { background:linear-gradient(180deg,#eef2ff,#e2f0ff); border:1px solid #cfe6ff; }
+  .enemyBox { background:linear-gradient(180deg,#fff0f0,#ffecec); border:1px solid #ffd6d6; }
+  .flash-attack { animation:flashAttack 220ms ease; }
+  .flash-hit { animation:flashHit 220ms ease; }
+  @keyframes flashAttack { 0% { transform:translateY(0) } 50% { transform:translateY(-6px) } 100% { transform:translateY(0) } }
+  @keyframes flashHit { 0% { opacity:1 } 50% { opacity:0.2 } 100% { opacity:1 } }
+  /* 상점 리스트 */
+  .shop-item { display:flex; justify-content:space-between; padding:6px 8px; border-bottom:1px dashed #eef2ff; align-items:center; }
+  .small { font-size:13px; color:#475569; }
+  .badge { background:#f1f5f9; padding:4px 6px; border-radius:6px; font-size:12px; }
+</style>
+</head>
+<body>
+  <div id="game">
+    <h2>RPG 타자 연습 — 확장판</h2>
+
+    <!-- 설정 화면 -->
+    <div id="setup" class="panel">
+      <div class="row">
+        <div class="col stat">
+          <div><strong>언어 선택</strong></div>
+          <select id="langSelect">
+            <option value="ko">한국어</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+
+        <div class="col stat">
+          <div><strong>단어 난이도</strong></div>
+          <select id="wordLen">
+            <option value="short">짧음 (2-4)</option>
+            <option value="medium">보통 (4-7)</option>
+            <option value="long">김 (7+)</option>
+          </select>
+        </div>
+
+        <div class="col stat">
+          <div><strong>직업 선택</strong></div>
+          <select id="jobSelect">
+            <option value="sword">검사</option>
+            <option value="gun">총사</option>
+          </select>
+        </div>
+
+        <div class="col stat">
+          <div><strong>스테이지 선택 (1-4)</strong></div>
+          <select id="stageSelect">
+            <option value="1">1단계 (Easy)</option>
+            <option value="2">2단계</option>
+            <option value="3">3단계</option>
+            <option value="4">4단계 (Hard)</option>
+          </select>
+        </div>
+
+        <div>
+          <button id="startBtn">시작</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col small">설명: 제한시간 안에 단어를 정확히 치면 공격. 실패하면 적이 공격합니다. 상점에서 장비를 구매해 능력치 상승. 자동 저장됨.</div>
+      </div>
+    </div>
+
+    <!-- 플레이 화면 -->
+    <div id="play" style="display:none;">
+      <div class="row">
+        <!-- 플레이어 패널 -->
+        <div class="col panel">
+          <div class="row">
+            <div style="width:220px;">
+              <div id="playerEntity" class="entity playerBox">
+                <div id="playerName"><strong>플레이어</strong></div>
+                <div id="playerHP" class="small">HP</div>
+              </div>
+            </div>
+
+            <div class="col">
+              <div id="playerInfo" class="small">직업: - | Lv:- | HP:- | ATK:- | EXP:- | 골드:-</div>
+              <div style="margin-top:8px;">
+                <strong>장비</strong>
+                <div id="equips" class="small">없음</div>
+              </div>
+              <div style="margin-top:8px;">
+                <button id="openShop">상점</button>
+                <button id="saveBtn">저장</button>
+                <button id="quitBtn">중단</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 적 패널 -->
+        <div style="width:320px;" class="panel">
+          <div id="enemyEntity" class="entity enemyBox">
+            <div id="enemyName"><strong>적</strong></div>
+            <div id="enemyHP" class="small">HP</div>
+          </div>
+
+          <div style="margin-top:8px;" class="small">
+            <div>스테이지: <span id="currentStage">-</span></div>
+            <div>남은 적: <span id="remainingEnemies">-</span></div>
+            <div>남은시간: <span id="timeLeft">0.0</span>s</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col">
+          <div id="wordBox">(단어 대기중)</div>
+          <div style="margin-top:8px;">
+            <input id="typeInput" type="text" autocomplete="off" placeholder="단어를 입력하고 Enter" />
+          </div>
+        </div>
+
+        <div style="width:260px;" class="panel">
+          <div><strong>전투 로그</strong></div>
+          <div id="log"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 상점 모달(간단) -->
+    <div id="shopModal" style="display:none; position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:white; border:1px solid #cbd5e1; padding:12px; z-index:40; border-radius:8px; width:420px;">
+      <h3 style="margin:0 0 8px 0;">상점</h3>
+      <div id="shopList" style="max-height:260px; overflow:auto; border:1px solid #eef2ff; border-radius:6px;"></div>
+      <div style="margin-top:8px; display:flex; justify-content:flex-end; gap:8px;">
+        <button id="closeShop">닫기</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/*
+  확장판 구현 목표:
+  - 언어 선택(한국어/영어)
+  - 단어 길이 난이도
+  - 상점(무기/방어구/꾸밈) 구매 및 장착 (골드 사용)
+  - 간단한 애니메이션(attack/hit)
+  - 자동 저장(localStorage)
+  - 4스테이지, 단계별 시간 감소
+  - 고1 수준의 직관적 코드와 주석
+*/
+
+/* ---------- 단어 리스트 (간단) ---------- */
+const WORDS_KO = ["사과","학교","바다","꿈","하늘","컴퓨터","자전거","친구","영화","음악","책상","도서관","강아지","고양이","봄","여름","가을","겨울","노래","사랑","바람","시간","미래","현재","과학","수학","역사","언어","연습","도전","프로그래밍","인터넷","화면","키보드","모니터","정보"];
+const WORDS_EN = ["apple","school","ocean","dream","sky","computer","bicycle","friend","movie","music","desk","library","puppy","kitten","spring","summer","autumn","winter","song","love","wind","time","future","present","science","math","history","language","practice","challenge","programming","internet","screen","keyboard","monitor","information"];
+
+/* ---------- 직업 및 스테이지 데이터 ---------- */
+const JOBS = {
+  sword: { name: "검사", baseHP: 20, baseATK: 4 },
+  gun:   { name: "총사", baseHP: 16, baseATK: 5 }
+};
+
+const STAGES = {
+  1: { name:"초급 지역", timeLimit:6.0, enemies: [
+        { name:"슬라임", hp:6, atk:2, gold:5, exp:3 },
+        { name:"고블린", hp:8, atk:2, gold:6, exp:4 },
+        { name:"늪 괴물", hp:10, atk:3, gold:8, exp:5 }
+     ]},
+  2: { name:"숲 속", timeLimit:5.0, enemies: [
+        { name:"늑대", hp:10, atk:3, gold:8, exp:6 },
+        { name:"히드라 새끼", hp:12, atk:3, gold:10, exp:7 },
+        { name:"포식자", hp:14, atk:4, gold:12, exp:9 }
+     ]},
+  3: { name:"동굴", timeLimit:4.0, enemies: [
+        { name:"동굴 박쥐", hp:12, atk:4, gold:10, exp:8 },
+        { name:"암석 골렘", hp:16, atk:5, gold:14, exp:12 },
+        { name:"그림자 도적", hp:18, atk:6, gold:16, exp:14 }
+     ]},
+  4: { name:"성문 앞", timeLimit:3.0, enemies: [
+        { name:"기사", hp:20, atk:7, gold:20, exp:18 },
+        { name:"마법사 소환수", hp:24, atk:8, gold:24, exp:20 },
+        { name:"장군", hp:30, atk:10, gold:40, exp:35 }
+     ]}
+};
+
+/* ---------- 상점 아이템 정의 (간단) ---------- */
+const SHOP_ITEMS = [
+  { id: "sword_1", name:"나무 검", type:"weapon", atk:2, hp:0, price:20 },
+  { id: "sword_2", name:"강철 검", type:"weapon", atk:4, hp:0, price:60 },
+  { id: "gun_1", name:"낡은 총", type:"weapon", atk:3, hp:0, price:30 },
+  { id: "armor_1", name:"가죽 갑옷", type:"armor", atk:0, hp:6, price:40 },
+  { id: "armor_2", name:"강철 갑옷", type:"armor", atk:0, hp:12, price:100 },
+  { id: "cos_1", name:"모자 (꾸밈)", type:"cosmetic", atk:0, hp:0, price:15 }
+];
+
+/* ---------- 게임 상태 ---------- */
+let player = null;
+let currentStage = null;
+let enemyQueue = [];
+let currentEnemy = null;
+let timeLeft = 0;
+let word = "";
+let timerInterval = null;
+let inputEl = null;
+let logEl = null;
+let lang = "ko";
+let wordLenPref = "short";
+
+/* ---------- UI 연결 ---------- */
+const startBtn = document.getElementById('startBtn');
+const jobSelect = document.getElementById('jobSelect');
+const stageSelect = document.getElementById('stageSelect');
+const setupDiv = document.getElementById('setup');
+const playDiv = document.getElementById('play');
+const playerInfo = document.getElementById('playerInfo');
+const enemyInfo = document.getElementById('enemyInfo');
+const currentStageSpan = document.getElementById('currentStage');
+const remainingEnemiesSpan = document.getElementById('remainingEnemies');
+const timeLeftSpan = document.getElementById('timeLeft');
+const wordBox = document.getElementById('wordBox');
+inputEl = document.getElementById('typeInput');
+logEl = document.getElementById('log');
+const quitBtn = document.getElementById('quitBtn');
+const openShopBtn = document.getElementById('openShop');
+const shopModal = document.getElementById('shopModal');
+const shopList = document.getElementById('shopList');
+const closeShopBtn = document.getElementById('closeShop');
+const saveBtn = document.getElementById('saveBtn');
+const langSelect = document.getElementById('langSelect');
+const wordLenSelect = document.getElementById('wordLen');
+const equipsDiv = document.getElementById('equips');
+const playerEntity = document.getElementById('playerEntity');
+const enemyEntity = document.getElementById('enemyEntity');
+const playerHPDiv = document.getElementById('playerHP');
+const enemyNameDiv = document.getElementById('enemyName');
+const enemyHPDiv = document.getElementById('enemyHP');
+
+/* ---------- 유틸 ---------- */
+function randChoice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function appendLog(text){
+  const p = document.createElement('div');
+  p.textContent = text;
+  logEl.appendChild(p);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function saveGame(){
+  const data = {
+    player, currentStage
+  };
+  localStorage.setItem('rpg_typing_save', JSON.stringify(data));
+  appendLog("게임 저장됨");
+}
+function loadGame(){
+  const raw = localStorage.getItem('rpg_typing_save');
+  if(!raw) return false;
+  try{
+    const data = JSON.parse(raw);
+    if(data.player) player = data.player;
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ---------- 플레이어 초기화 ---------- */
+function initPlayer(jobKey){
+  const job = JOBS[jobKey];
+  // 로드된 플레이어가 있으면 유지. 아니면 새로 생성
+  if(player && player.job === jobKey && player.level){
+    // 기존 유지
+    return;
+  }
+  player = {
+    job: jobKey,
+    jobName: job.name,
+    level: 1,
+    exp: 0,
+    gold: 0,
+    maxHp: job.baseHP,
+    hp: job.baseHP,
+    atk: job.baseATK,
+    equips: {} // 장착 아이템 저장
+  };
+}
+
+/* ---------- 스테이지 로드 ---------- */
+function loadStage(n){
+  currentStage = n;
+  // 복사해서 사용
+  enemyQueue = STAGES[n].enemies.map(e => ({...e}));
+  currentEnemy = enemyQueue.shift();
+  timeLeft = STAGES[n].timeLimit;
+  updateUI();
+}
+
+/* ---------- UI 갱신 ---------- */
+function updateUI(){
+  playerInfo.textContent = `직업: ${player.jobName} | Lv: ${player.level} | HP: ${player.hp}/${player.maxHp} | ATK: ${player.atk} | EXP: ${player.exp} | 골드: ${player.gold}`;
+  playerHPDiv.textContent = `HP: ${player.hp}/${player.maxHp}`;
+  enemyNameDiv.textContent = currentEnemy ? `${currentEnemy.name}` : "없음";
+  enemyHPDiv.textContent = currentEnemy ? `HP: ${currentEnemy.hp}` : "";
+  currentStageSpan.textContent = `${currentStage} - ${STAGES[currentStage].name}`;
+  remainingEnemiesSpan.textContent = (currentEnemy ? 1 : 0) + enemyQueue.length;
+  timeLeftSpan.textContent = timeLeft.toFixed(1);
+  wordBox.textContent = word || "(단어 대기중)";
+  // 장비 표시
+  const eq = player.equips;
+  const eqText = Object.keys(eq).length === 0 ? "없음" : Object.values(eq).map(i=>i.name).join(", ");
+  equipsDiv.textContent = eqText;
+}
+
+/* ---------- 전투 계산 ---------- */
+function playerAttack(){
+  const damage = player.atk;
+  // 간단히 치명타 확률 없음
+  currentEnemy.hp -= damage;
+  appendLog(`플레이어가 '${word}' 입력 성공. ${currentEnemy.name}에게 ${damage} 피해.`);
+  flash(playerEntity, 'flash-attack');
+  flash(enemyEntity, 'flash-hit');
+  showDamage(`${damage} 데미지!`);
+  if(currentEnemy.hp <= 0){
+    enemyDefeated();
+  } else {
+    nextWord();
+  }
+}
+
+function enemyAttack(){
+  const damage = currentEnemy.atk;
+  player.hp -= damage;
+  appendLog(`${currentEnemy.name}의 공격. 플레이어에게 ${damage} 피해.`);
+  flash(enemyEntity, 'flash-attack');
+  flash(playerEntity, 'flash-hit');
+  showDamage(`-${damage} HP`);
+  if(player.hp <= 0){
+    gameOver();
+  } else {
+    nextWord();
+  }
+}
+
+function enemyDefeated(){
+  appendLog(`${currentEnemy.name} 처치! EXP ${currentEnemy.exp} / 골드 ${currentEnemy.gold} 획득.`);
+  player.exp += currentEnemy.exp;
+  player.gold += currentEnemy.gold;
+  checkLevelUp();
+  currentEnemy = enemyQueue.shift() || null;
+  if(!currentEnemy){
+    appendLog(`스테이지 ${currentStage} 클리어!`);
+    stopTimer();
+    setTimeout(()=>{
+      playDiv.style.display = 'none';
+      setupDiv.style.display = 'block';
+      updateUI();
+      alert(`클리어: 스테이지 ${currentStage}를 클리어했습니다. 골드 ${player.gold} / LV ${player.level}`);
+    },300);
+  } else {
+    timeLeft = STAGES[currentStage].timeLimit;
+    updateUI();
+    nextWord();
+  }
+}
+
+/* ---------- 레벨업 ---------- */
+function checkLevelUp(){
+  // 필요 경험치: level * 5
+  let need = player.level * 5;
+  while(player.exp >= need){
+    player.exp -= need;
+    player.level += 1;
+    player.maxHp += 4;
+    player.atk += 1;
+    player.hp = player.maxHp;
+    appendLog(`레벨업! Lv ${player.level} 도달. HP와 공격력이 증가했습니다.`);
+    need = player.level * 5;
+  }
+}
+
+/* ---------- 단어 선택 및 타이머 ---------- */
+function pickWord(){
+  let pool = (lang === 'ko') ? WORDS_KO.slice() : WORDS_EN.slice();
+  // 필터링: 길이
+  let minL=2, maxL=4;
+  if(wordLenPref === 'short'){ minL=2; maxL=4; }
+  else if(wordLenPref === 'medium'){ minL=4; maxL=7; }
+  else { minL=7; maxL=999; }
+  pool = pool.filter(w => w.length >= minL && w.length <= maxL);
+  return randChoice(pool);
+}
+
+function nextWord(){
+  clearInput();
+  word = pickWord();
+  // 스테이지의 기본 시간 사용
+  timeLeft = STAGES[currentStage].timeLimit;
+  updateUI();
+}
+
+function startTimer(){
+  if(timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(()=>{
+    timeLeft -= 0.1;
+    if(timeLeft < 0) timeLeft = 0;
+    timeLeftSpan.textContent = timeLeft.toFixed(1);
+    if(timeLeft <= 0){
+      appendLog(`시간초과! ${currentEnemy.name}이 공격합니다.`);
+      enemyAttack();
+    }
+  },100);
+}
+
+function stopTimer(){
+  if(timerInterval){ clearInterval(timerInterval); timerInterval = null; }
+}
+
+function clearInput(){
+  inputEl.value = "";
+  inputEl.focus();
+}
+
+/* ---------- 단어 입력 처리 ---------- */
+inputEl.addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter'){
+    const val = inputEl.value.trim();
+    if(!word) return;
+    if(val === word){
+      stopTimer();
+      playerAttack();
+      startTimer();
+    } else {
+      appendLog(`입력 오류: '${val}' (정답: '${word}')`);
+      clearInput();
+    }
+  } else if(e.key === 'Escape'){
+    stopTimer();
+    appendLog('플레이어가 포기. 몬스터가 공격합니다.');
+    enemyAttack();
+    startTimer();
+  }
+});
+
+/* ---------- 게임 흐름 제어 ---------- */
+function startGame(){
+  lang = langSelect.value;
+  wordLenPref = wordLenSelect.value;
+  initPlayer(jobSelect.value);
+  // 로드된 상태가 있으면 유지. 항상 선택 스테이지 로드
+  loadStage(parseInt(stageSelect.value,10));
+  setupDiv.style.display = 'none';
+  playDiv.style.display = 'block';
+  logEl.innerHTML = '';
+  appendLog(`게임 시작. 직업: ${player.jobName} | 스테이지: ${currentStage} - ${STAGES[currentStage].name}`);
+  nextWord();
+  startTimer();
+  updateUI();
+  saveGame(); // 시작 시 저장
+}
+
+function gameOver(){
+  stopTimer();
+  appendLog("플레이어 사망. 게임 오버.");
+  alert("플레이어가 사망했습니다. 저장된 데이터로 재시작 가능합니다.");
+  // 플레이 화면으로 돌아가기
+  playDiv.style.display = 'none';
+  setupDiv.style.display = 'block';
+}
+
+/* ---------- 플래시 이펙트 ---------- */
+function flash(el, className){
+  el.classList.add(className);
+  setTimeout(()=> el.classList.remove(className), 220);
+}
+
+/* ---------- 데미지 표시 ---------- */
+function showDamage(text){
+  const dmgEl = document.createElement('div');
+  dmgEl.textContent = text;
+  dmgEl.style.position = 'relative';
+  dmgEl.style.fontWeight = '700';
+  dmgEl.style.marginTop = '6px';
+  logEl.appendChild(dmgEl);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+/* ---------- 상점 관련 ---------- */
+function openShop(){
+  shopModal.style.display = 'block';
+  renderShop();
+}
+function closeShop(){ shopModal.style.display = 'none'; }
+function renderShop(){
+  shopList.innerHTML = '';
+  SHOP_ITEMS.forEach(item=>{
+    const row = document.createElement('div');
+    row.className = 'shop-item';
+    const left = document.createElement('div');
+    left.innerHTML = `<strong>${item.name}</strong><div class="small">종류:${item.type} ATK:${item.atk} HP:${item.hp}</div>`;
+    const right = document.createElement('div');
+    right.innerHTML = `<span class="badge">${item.price}G</span> <button data-id="${item.id}">구매</button>`;
+    row.appendChild(left); row.appendChild(right);
+    shopList.appendChild(row);
+    right.querySelector('button').addEventListener('click', ()=> buyItem(item.id));
+  });
+}
+function buyItem(id){
+  const item = SHOP_ITEMS.find(i=>i.id===id);
+  if(!item) return;
+  if(player.gold < item.price){
+    appendLog('골드 부족');
+    return;
+  }
+  player.gold -= item.price;
+  // 장착 또는 인벤토리로 처리: 단순히 장착
+  if(item.type === 'weapon' || item.type === 'armor' || item.type === 'cosmetic'){
+    player.equips[item.type] = item;
+    // 장착 시 스탯 반영: 재계산 간단화
+    recalcStats();
+    appendLog(`${item.name}을(를) 장착했습니다.`);
+  } else {
+    appendLog(`${item.name}을(를) 획득했습니다.`);
+  }
+  saveGame();
+  updateUI();
+}
+
+/* ---------- 장비로 스탯 재계산 ---------- */
+function recalcStats(){
+  // 기본 스탯에서 장비 수치 더하기
+  const base = JOBS[player.job];
+  player.maxHp = base.baseHP;
+  player.atk = base.baseATK;
+  const eq = player.equips;
+  if(eq.armor) player.maxHp += eq.armor.hp;
+  if(eq.weapon) player.atk += eq.weapon.atk;
+  // 현재 hp는 최대 hp를 넘어가면 맞춤
+  if(player.hp > player.maxHp) player.hp = player.maxHp;
+}
+
+/* ---------- 저장/불러오기 ---------- */
+saveBtn.addEventListener('click', ()=>{ saveGame(); });
+openShopBtn.addEventListener('click', ()=>{ openShop(); });
+closeShopBtn.addEventListener('click', ()=>{ closeShop(); });
+quitBtn.addEventListener('click', ()=>{
+  stopTimer();
+  playDiv.style.display = 'none';
+  setupDiv.style.display = 'block';
+  saveGame();
+});
+
+/* ---------- 버튼 바인딩 ---------- */
+startBtn.addEventListener('click', ()=> {
+  // 로드가 가능한지 먼저 시도
+  const loaded = loadGame();
+  // 항상 init with selected job to ensure job matches selection
+  initPlayer(jobSelect.value);
+  startGame();
+});
+
+/* ---------- 초기화 시 로드 시도 및 UI 세팅 ---------- */
+(function init(){
+  // 언어 및 단어 길이 선택 연결
+  langSelect.addEventListener('change', ()=> lang = langSelect.value);
+  wordLenSelect.addEventListener('change', ()=> wordLenPref = wordLenSelect.value);
+  // 자동 로드: 이미 저장된 데이터가 있으면 불러와서 UI에 반영
+  const ok = loadGame();
+  if(ok){
+    appendLog("저장된 게임을 불러왔습니다.");
+    // player 정보는 유지하되 새 스테이지 선택 시 덮어쓰기 됨
+    // 업데이트 UI를 위해 기본값 셋
+    updateUI();
+  }
+  inputEl.placeholder = "시작 버튼 누른 후 입력하세요";
+})();
+</script>
+</body>
+</html>
